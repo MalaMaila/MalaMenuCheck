@@ -1,1 +1,501 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>POS Register & Table Management</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Helvetica, Arial, sans-serif; margin: 0; padding: 10px; background: #f4f4f9; }
+    
+    /* Header Icon & Banner Styling */
+    .app-header { text-align: center; margin-bottom: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .header-logo { max-height: 80px; width: auto; object-fit: contain; border-radius: 8px; }
+    .header-banner { width: 100%; max-width: 600px; height: auto; object-fit: contain; border-radius: 8px; }
 
+    .app-container { display: flex; flex-direction: column; gap: 15px; }
+    
+    .menu-panel { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
+    .tile { flex: 1 1 calc(50% - 10px); min-height: 80px; background: #007aff; color: #fff; border-radius: 8px; text-align: center; cursor: pointer; padding: 10px 5px; }
+    .tile:active { background: #0051a8; }
+    .tile-img { width: 100%; height: 75px; object-fit: contain; background: rgba(0,0,0,0.15); border-radius: 6px; margin-bottom: 6px; }
+    .tile-title { font-size: 15px; font-weight: bold; }
+    .tile-price { font-size: 14px; margin-top: 3px; }
+    
+    .receipt-panel { background: #fff; border: 1px solid #ccc; padding: 15px; border-radius: 8px; width: 100%; }
+    .receipt-list { list-style: none; padding: 0; margin: 10px 0; max-height: 220px; overflow-y: auto; border-bottom: 1px solid #eee; }
+    .receipt-list li { padding: 8px 0; border-bottom: 1px solid #eee; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
+    .remove-btn { background: #ff3b30; color: #fff; border: none; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 12px; margin-left: 8px; }
+    .total-box { font-size: 20px; font-weight: bold; margin: 10px 0; }
+    .daily-box { background: #e5f9e5; padding: 10px; border-radius: 6px; margin: 10px 0; font-size: 16px; font-weight: bold; }
+    .btn { display: block; width: 100%; padding: 14px; font-size: 16px; font-weight: bold; border: none; border-radius: 6px; margin-bottom: 8px; color: #fff; cursor: pointer; }
+    .btn-checkout { background-color: #34c759; }
+    .btn-clear { background-color: #ff3b30; }
+    .btn-save { background-color: #007aff; }
+
+    /* Table Grid Styling */
+    .table-section { margin-bottom: 15px; background: #f8f9fa; padding: 10px; border-radius: 6px; border: 1px solid #ddd; }
+    .table-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
+    .table-btn { padding: 8px 2px; font-size: 12px; font-weight: bold; border-radius: 6px; border: 2px solid transparent; cursor: pointer; text-align: center; }
+    .table-btn.empty { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+    .table-btn.occupied { background: #ffedd5; color: #c2410c; border-color: #fdba74; }
+    .table-btn.selected { border-color: #000 !important; transform: scale(1.03); }
+    .table-status-tag { display: block; font-size: 10px; font-weight: normal; margin-top: 2px; }
+
+    @media (min-width: 600px) {
+      .app-container { flex-direction: row; }
+      .receipt-panel { flex: 1; order: 1; }
+      .menu-panel { flex: 1.5; order: 2; }
+      .tile { flex: 1 1 calc(33% - 10px); }
+    }
+    @media print {
+      .menu-panel, .no-print, .remove-btn, .table-section, .app-header { display: none !important; }
+      .receipt-panel { border: none; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Logo/Header & Banner -->
+  <div class="app-header no-print">
+    <img src="hg.jpg" alt="Logo" class="header-logo">
+    <img src="hgb.jpg" alt="Banner" class="header-banner">
+  </div>
+
+  <div class="app-container">
+    
+    <!-- Register / Control Panel First -->
+    <div class="receipt-panel">
+      <!-- 1. Table Selector Box -->
+      <div class="table-section no-print">
+        <label style="font-size: 13px; font-weight: bold; color: #555;">Select Table / Order Type:</label>
+        <div class="table-grid" id="table-grid">
+          <!-- Tables generated dynamically -->
+        </div>
+      </div>
+
+      <!-- 2. Search Bar Directly Above Items / Order -->
+      <div class="no-print" style="margin-bottom: 12px;">
+        <input type="text" id="item-search" onkeyup="filterItems()" placeholder="🔍 Search menu items..." style="width: 100%; padding: 10px 12px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px;">
+      </div>
+
+      <h3 style="margin-top:0;" id="order-title">Active Order: Takeaway</h3>
+      
+      <!-- Order Date Selector -->
+      <div style="margin-bottom: 12px; background: #f8f9fa; padding: 8px; border-radius: 6px; border: 1px solid #ddd;">
+        <label style="font-size: 13px; font-weight: bold; color: #555; display: block; margin-bottom: 4px;">Sale Date:</label>
+        <input type="date" id="sale-date" readonly onclick="unlockDateChange()" style="width: 100%; padding: 6px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; background-color: #fff; cursor: pointer;">
+      </div>
+
+      <ul id="receipt-list" class="receipt-list"></ul>
+      <div class="total-box">Total: ฿<span id="current-total">0.00</span></div>
+
+      <!-- 3. Finalize & Order Controls -->
+      <div class="no-print">
+        <button class="btn btn-save" onclick="saveTableOrder()">Hold / Save Order to Table</button>
+        <button class="btn btn-checkout" onclick="completeSale()">Finalize & Pay</button>
+        <button class="btn btn-clear" onclick="clearReceipt()">Clear Order</button>
+        <div class="daily-box">Today's Total: ฿<span id="daily-total">0.00</span></div>
+        <button class="btn btn-clear" style="margin-top: 5px; background-color: #ff9500;" onclick="resetDailyTotal()">Reset Daily Total</button>
+      </div>
+    </div>
+
+    <!-- Menu Items Second -->
+    <div class="menu-panel no-print">
+      <!-- Ice Cream & Sweets -->
+      <div class="tile" onclick="addItem('1 Scoop', 10)"><div class="tile-title">1 Scoop</div><div class="tile-price">฿10</div></div>
+      <div class="tile" onclick="addItem('2 Scoops', 20)"><div class="tile-title">2 Scoops</div><div class="tile-price">฿20</div></div>
+      <div class="tile" onclick="addItem('3 Scoops', 30)"><div class="tile-title">3 Scoops</div><div class="tile-price">฿30</div></div>
+      <div class="tile" onclick="addItem('4 Scoops', 40)"><div class="tile-title">4 Scoops</div><div class="tile-price">฿40</div></div>
+      <div class="tile" onclick="addItem('Waffle Cone', 10)"><div class="tile-title">Waffle Cone</div><div class="tile-price">฿10</div></div>
+      <div class="tile" onclick="addItem('Milkshake', 60)"><div class="tile-title">Milkshake</div><div class="tile-price">฿60</div></div>
+      <div class="tile" onclick="addItem('Ice Cream Toast', 39)"><div class="tile-title">Ice Cream Toast</div><div class="tile-price">฿39</div></div>
+      <div class="tile" onclick="addItem('Milk Tart', 95)"><div class="tile-title">Milk Tart</div><div class="tile-price">฿95</div></div>
+      <div class="tile" onclick="addItem('KoekSisters', 40)"><div class="tile-title">KoekSisters</div><div class="tile-price">฿40</div></div>
+      <div class="tile" onclick="addItem('Ice Cream Waffle', 29)"><div class="tile-title">Ice Cream Waffle</div><div class="tile-price">฿29</div></div>
+
+      <!-- Gaming Sessions -->
+      <div class="tile" onclick="addItem('Adult Game 30 min', 55)"><div class="tile-title">Adult Game 30 min</div><div class="tile-price">฿55</div></div>
+      <div class="tile" onclick="addItem('Adult Game 1 Hour', 89)"><div class="tile-title">Adult Game 1 Hour</div><div class="tile-price">฿89</div></div>
+      <div class="tile" onclick="addItem('Student Game 30 min', 35)"><div class="tile-title">Student Game 30 min</div><div class="tile-price">฿35</div></div>
+      <div class="tile" onclick="addItem('Student Game 1 Hour', 59)"><div class="tile-title">Student Game 1 Hour</div><div class="tile-price">฿59</div></div>
+
+      <!-- Coffee & Beverages -->
+      <div class="tile" onclick="addItem('Americano', 35)"><div class="tile-title">Americano</div><div class="tile-price">฿35</div></div>
+      <div class="tile" onclick="addItem('Cappuccino', 40)"><div class="tile-title">Cappuccino</div><div class="tile-price">฿40</div></div>
+      <div class="tile" onclick="addItem('Cocoa', 35)"><div class="tile-title">Cocoa</div><div class="tile-price">฿35</div></div>
+      <div class="tile" onclick="addItem('Espresso', 40)"><div class="tile-title">Espresso</div><div class="tile-price">฿40</div></div>
+      <div class="tile" onclick="addItem('Fresh Milk', 35)"><div class="tile-title">Fresh Milk</div><div class="tile-price">฿35</div></div>
+      <div class="tile" onclick="addItem('Green Tea', 35)"><div class="tile-title">Green Tea</div><div class="tile-price">฿35</div></div>
+      <div class="tile" onclick="addItem('Latte', 40)"><div class="tile-title">Latte</div><div class="tile-price">฿40</div></div>
+      <div class="tile" onclick="addItem('Macchiato', 45)"><div class="tile-title">Macchiato</div><div class="tile-price">฿45</div></div>
+      <div class="tile" onclick="addItem('Mocha', 45)"><div class="tile-title">Mocha</div><div class="tile-price">฿45</div></div>
+      <div class="tile" onclick="addItem('Lychee Tea', 35)"><div class="tile-title">Lychee Tea</div><div class="tile-price">฿35</div></div>
+      <div class="tile" onclick="addItem('Pink Milk', 35)"><div class="tile-title">Pink Milk</div><div class="tile-price">฿35</div></div>
+      <div class="tile" onclick="addItem('Thai Lime Tea', 35)"><div class="tile-title">Thai Lime Tea</div><div class="tile-price">฿35</div></div>
+      <div class="tile" onclick="addItem('Sparkling Soda', 35)"><div class="tile-title">Sparkling Soda</div><div class="tile-price">฿35</div></div>
+      <div class="tile" onclick="addItem('Banana Milk', 35)"><div class="tile-title">Banana Milk</div><div class="tile-price">฿35</div></div>
+      <div class="tile" onclick="addItem('Thai Tea', 35)"><div class="tile-title">Thai Tea</div><div class="tile-price">฿35</div></div>
+
+      <!-- Food -->
+      <div class="tile" onclick="addItem('Toasted Steak Special', 159)"><div class="tile-title">Toasted Steak Special</div><div class="tile-price">฿159</div></div>
+      <div class="tile" onclick="addItem('Spaghetti', 69)"><div class="tile-title">Spaghetti</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('Pasta', 69)"><div class="tile-title">Pasta</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('Dumpling', 69)"><div class="tile-title">Dumpling</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('Chicken Wrap', 69)"><div class="tile-title">Chicken Wrap</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('Chicken Roti', 69)"><div class="tile-title">Chicken Roti</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('Plain Roti', 25)"><div class="tile-title">Plain Roti</div><div class="tile-price">฿25</div></div>
+
+      <!-- New Items: Seafood & Local Dishes -->
+      <div class="tile" onclick="addItem('แซลม่อนจิ้ม / ซีฟู้ด', 120)"><div class="tile-title">แซลม่อนจิ้ม / ซีฟู้ด</div><div class="tile-price">฿120</div></div>
+      <div class="tile" onclick="addItem('หมูมะนาว', 69)"><div class="tile-title">หมูมะนาว</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('กุ้งแช่น้ำปลา', 69)"><div class="tile-title">กุ้งแช่น้ำปลา</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ยำหม่าล่า (แห้ง)', 69)"><div class="tile-title">ยำหม่าล่า (แห้ง)</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('หม่าล่าน้ำ', 89)"><div class="tile-title">หม่าล่าน้ำ</div><div class="tile-price">฿89</div></div>
+      <div class="tile" onclick="addItem('ดอลลี่ลวกจิ้ม', 69)"><div class="tile-title">ดอลลี่ลวกจิ้ม</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('แครงซีฟู้ด', 69)"><div class="tile-title">แครงซีฟู้ด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('หมึกกรอบลวกจิ้ม', 69)"><div class="tile-title">หมึกกรอบลวกจิ้ม</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ปูม้าลวกจิ้ม', 69)"><div class="tile-title">ปูม้าลวกจิ้ม</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ทะเลลวกจิ้ม', 109)"><div class="tile-title">ทะเลลวกจิ้ม</div><div class="tile-price">฿109</div></div>
+      <div class="tile" onclick="addItem('เหลาทะเลรวม (เพิ่มปูม้า)', 159)"><div class="tile-title">เหลาทะเลรวม (เพิ่มปูม้า)</div><div class="tile-price">฿159</div></div>
+      <div class="tile" onclick="addItem('เห็ดเข็มทองทอดหม่าล่า', 69)"><div class="tile-title">เห็ดเข็มทองทอดหม่าล่า</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ตำ/ยำ รวมทะเล จัมโบ้', 259)"><div class="tile-title">ตำ/ยำ รวมทะเล จัมโบ้</div><div class="tile-price">฿259</div></div>
+      <div class="tile" onclick="addItem('ตำ/ยำ สตรอว์เบอร์รี่', 89)"><div class="tile-title">ตำ/ยำ สตรอว์เบอร์รี่</div><div class="tile-price">฿89</div></div>
+      <div class="tile" onclick="addItem('ตำเมืองๆ', 50)"><div class="tile-title">ตำเมืองๆ</div><div class="tile-price">฿50</div></div>
+      <div class="tile" onclick="addItem('ยำหอยนางรม', 99)"><div class="tile-title">ยำหอยนางรม</div><div class="tile-price">฿99</div></div>
+      <div class="tile" onclick="addItem('แมงกะพรุนน้ำมันงา', 89)"><div class="tile-title">แมงกะพรุนน้ำมันงา</div><div class="tile-price">฿89</div></div>
+      <div class="tile" onclick="addItem('ซอยจุ๊', 99)"><div class="tile-title">ซอยจุ๊</div><div class="tile-price">฿99</div></div>
+
+      <!-- Som Tam (Papaya Salads) -->
+      <div class="tile" onclick="addItem('ตำมะละกอ', 40)"><div class="tile-title">ตำมะละกอ</div><div class="tile-price">฿40</div></div>
+      <div class="tile" onclick="addItem('ตำแตงกวา', 40)"><div class="tile-title">ตำแตงกวา</div><div class="tile-price">฿40</div></div>
+      <div class="tile" onclick="addItem('ตำสายบัว', 50)"><div class="tile-title">ตำสายบัว</div><div class="tile-price">฿50</div></div>
+      <div class="tile" onclick="addItem('ตำวุ้นเส้น', 50)"><div class="tile-title">ตำวุ้นเส้น</div><div class="tile-price">฿50</div></div>
+      <div class="tile" onclick="addItem('ตำขนมจีน', 50)"><div class="tile-title">ตำขนมจีน</div><div class="tile-price">฿50</div></div>
+      <div class="tile" onclick="addItem('ตำงูเขียว', 59)"><div class="tile-title">ตำงูเขียว</div><div class="tile-price">฿59</div></div>
+      <div class="tile" onclick="addItem('ตำยอดมะพร้าว', 59)"><div class="tile-title">ตำยอดมะพร้าว</div><div class="tile-price">฿59</div></div>
+      <div class="tile" onclick="addItem('ตำหอยแครง', 69)"><div class="tile-title">ตำหอยแครง</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ตำกุ้งสด (ลวก)', 69)"><div class="tile-title">ตำกุ้งสด (ลวก)</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ตำหมึกกรอบ', 69)"><div class="tile-title">ตำหมึกกรอบ</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ตำหมึกสด', 69)"><div class="tile-title">ตำหมึกสด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ตำแซลม่อน', 120)"><div class="tile-title">ตำแซลม่อน</div><div class="tile-price">฿120</div></div>
+      <div class="tile" onclick="addItem('ตำปูม้า', 79)"><div class="tile-title">ตำปูม้า</div><div class="tile-price">฿79</div></div>
+      <div class="tile" onclick="addItem('ตำหมูกรอบ', 69)"><div class="tile-title">ตำหมูกรอบ</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ตำหมูยอ', 69)"><div class="tile-title">ตำหมูยอ</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ตำทะเลรวม', 79)"><div class="tile-title">ตำทะเลรวม</div><div class="tile-price">฿79</div></div>
+      <div class="tile" onclick="addItem('ตำแมงกะพรุน', 89)"><div class="tile-title">ตำแมงกะพรุน</div><div class="tile-price">฿89</div></div>
+      <div class="tile" onclick="addItem('ตำมะม่วง', 59)"><div class="tile-title">ตำมะม่วง</div><div class="tile-price">฿59</div></div>
+      <div class="tile" onclick="addItem('ตำกระท้อน', 59)"><div class="tile-title">ตำกระท้อน</div><div class="tile-price">฿59</div></div>
+      <div class="tile" onclick="addItem('ตำส้มโอ', 59)"><div class="tile-title">ตำส้มโอ</div><div class="tile-price">฿59</div></div>
+
+      <!-- Fried Snacks & Apptizers -->
+      <div class="tile" onclick="addItem('เม็ดมะม่วง', 69)"><div class="tile-title">เม็ดมะม่วง</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('เขียดทอด', 69)"><div class="tile-title">เขียดทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ไส้เป็ดทอด', 69)"><div class="tile-title">ไส้เป็ดทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ไส้เป็ดทอดหม่าล่า', 69)"><div class="tile-title">ไส้เป็ดทอดหม่าล่า</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ปลาไข่ทอด', 69)"><div class="tile-title">ปลาไข่ทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ปลาดอลลี่ทอด', 69)"><div class="tile-title">ปลาดอลลี่ทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ฮอทดอกแดงทอด', 69)"><div class="tile-title">ฮอทดอกแดงทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('เฟรนช์ฟรายส์', 69)"><div class="tile-title">เฟรนช์ฟรายส์</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('เฟรนช์ฟรายส์หม่าล่า', 69)"><div class="tile-title">เฟรนช์ฟรายส์หม่าล่า</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ทอดรวม', 69)"><div class="tile-title">ทอดรวม</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('นักเก็ตส์', 69)"><div class="tile-title">นักเก็ตส์</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('เอ็นไก่ทอด', 69)"><div class="tile-title">เอ็นไก่ทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ชีสบอล', 69)"><div class="tile-title">ชีสบอล</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('หัวหอมทอด', 69)"><div class="tile-title">หัวหอมทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('เห็ดเข็มทองทอด', 69)"><div class="tile-title">เห็ดเข็มทองทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ปูอัดเฟรนช์ฟรายส์', 69)"><div class="tile-title">ปูอัดเฟรนช์ฟรายส์</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ครีบท้องปลาแซลม่อนทอด', 69)"><div class="tile-title">ครีบท้องปลาแซลม่อนทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ไส้ชุบแป้งทอด', 69)"><div class="tile-title">ไส้ชุบแป้งทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('หมึกชุบแป้งทอด', 69)"><div class="tile-title">หมึกชุบแป้งทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ปีกไก่ชุบแป้งทอด', 69)"><div class="tile-title">ปีกไก่ชุบแป้งทอด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ปีกไก่ทอดหม่าล่า', 69)"><div class="tile-title">ปีกไก่ทอดหม่าล่า</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('สามชั้นทอดหม่าล่า', 69)"><div class="tile-title">สามชั้นทอดหม่าล่า</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ถั่วทอด', 69)"><div class="tile-title">ถั่วทอด</div><div class="tile-price">฿69</div></div>
+
+      <!-- Yam (Spicy Salads) -->
+      <div class="tile" onclick="addItem('ยำมะม่วง', 50)"><div class="tile-title">ยำมะม่วง</div><div class="tile-price">฿50</div></div>
+      <div class="tile" onclick="addItem('ยำกุ้งสด', 69)"><div class="tile-title">ยำกุ้งสด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ยำปูม้า', 79)"><div class="tile-title">ยำปูม้า</div><div class="tile-price">฿79</div></div>
+      <div class="tile" onclick="addItem('ยำหอยแครง', 69)"><div class="tile-title">ยำหอยแครง</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ยำหมึกกรอบ', 69)"><div class="tile-title">ยำหมึกกรอบ</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ยำแหนม', 69)"><div class="tile-title">ยำแหนม</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ยำแซลม่อน', 120)"><div class="tile-title">ยำแซลม่อน</div><div class="tile-price">฿120</div></div>
+      <div class="tile" onclick="addItem('ยำหมูยอ', 69)"><div class="tile-title">ยำหมูยอ</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ยำหมึกสด', 69)"><div class="tile-title">ยำหมึกสด</div><div class="tile-price">฿69</div></div>
+      <div class="tile" onclick="addItem('ยำวุ้นเส้นหมูสับ / ทะเล', 79)"><div class="tile-title">ยำวุ้นเส้นหมูสับ / ทะเล</div><div class="tile-price">฿79</div></div>
+      <div class="tile" onclick="addItem('ยำเห็ดหูหนูขาว', 59)"><div class="tile-title">ยำเห็ดหูหนูขาว</div><div class="tile-price">฿59</div></div>
+      <div class="tile" onclick="addItem('ยำแมงกะพรุน', 89)"><div class="tile-title">ยำแมงกะพรุน</div><div class="tile-price">฿89</div></div>
+
+      <!-- Soups & Quick Sides -->
+      <div class="tile" onclick="addItem('มะหล่าทั้ง', 89)"><div class="tile-title">มะหล่าทั้ง</div><div class="tile-price">฿89</div></div>
+      <div class="tile" onclick="addItem('ต้มซุปเอ็นไก่', 89)"><div class="tile-title">ต้มซุปเอ็นไก่</div><div class="tile-price">฿89</div></div>
+      <div class="tile" onclick="addItem('ต้มส้มดอลลี่', 89)"><div class="tile-title">ต้มส้มดอลลี่</div><div class="tile-price">฿89</div></div>
+      <div class="tile" onclick="addItem('ต้มส้มครีบแซลม่อน', 89)"><div class="tile-title">ต้มส้มครีบแซลม่อน</div><div class="tile-price">฿89</div></div>
+      <div class="tile" onclick="addItem('ต้มส้มหมู', 89)"><div class="tile-title">ต้มส้มหมู</div><div class="tile-price">฿89</div></div>
+      <div class="tile" onclick="addItem('มาม่าคัพ', 39)"><div class="tile-title">มาม่าคัพ</div><div class="tile-price">฿39</div></div>
+      <div class="tile" onclick="addItem('เส้นขนมจีน', 10)"><div class="tile-title">เส้นขนมจีน</div><div class="tile-price">฿10</div></div>
+      <div class="tile" onclick="addItem('เส้นมาม่า', 10)"><div class="tile-title">เส้นมาม่า</div><div class="tile-price">฿10</div></div>
+      <div class="tile" onclick="addItem('กระพรุนลวกจิ้ม', 89)"><div class="tile-title">กระพรุนลวกจิ้ม</div><div class="tile-price">฿89</div></div>
+      <div class="tile" onclick="addItem('สะไบนางลวกจิ้ม', 89)"><div class="tile-title">สะไบนางลวกจิ้ม</div><div class="tile-price">฿89</div></div>
+
+      <!-- Alcohol & Drinks -->
+      <div class="tile" onclick="addItem('แสงโสม (กลม)', 390)"><div class="tile-title">แสงโสม (กลม)</div><div class="tile-price">฿390</div></div>
+      <div class="tile" onclick="addItem('แสงโสม (แบน)', 190)"><div class="tile-title">แสงโสม (แบน)</div><div class="tile-price">฿190</div></div>
+      <div class="tile" onclick="addItem('รีเจนซี่ (แบน)', 490)"><div class="tile-title">รีเจนซี่ (แบน)</div><div class="tile-price">฿490</div></div>
+      <div class="tile" onclick="addItem('ข้าวหอม (ขวดใหญ่)', 99)"><div class="tile-title">ข้าวหอม (ใหญ่)</div><div class="tile-price">฿99</div></div>
+      <div class="tile" onclick="addItem('โซจู', 99)"><div class="tile-title">โซจู</div><div class="tile-price">฿99</div></div>
+      <div class="tile" onclick="addItem('รวงข้าว (แบน)', 60)"><div class="tile-title">รวงข้าว (แบน)</div><div class="tile-price">฿60</div></div>
+      <div class="tile" onclick="addItem('ข้าวหอม (แบน)', 70)"><div class="tile-title">ข้าวหอม (แบน)</div><div class="tile-price">฿70</div></div>
+      <div class="tile" onclick="addItem('พัทยา (แบน)', 70)"><div class="tile-title">พัทยา (แบน)</div><div class="tile-price">฿70</div></div>
+      <div class="tile" onclick="addItem('ภูเก็ตเบียร์', 70)"><div class="tile-title">ภูเก็ตเบียร์</div><div class="tile-price">฿70</div></div>
+      <div class="tile" onclick="addItem('สิงห์ (3 ขวด)', 210)"><div class="tile-title">สิงห์ (3 ขวด)</div><div class="tile-price">฿210</div></div>
+      <div class="tile" onclick="addItem('ช้าง (3 ขวด)', 180)"><div class="tile-title">ช้าง (3 ขวด)</div><div class="tile-price">฿180</div></div>
+      <div class="tile" onclick="addItem('ช้าง (ขวด)', 65)"><div class="tile-title">ช้าง (ขวด)</div><div class="tile-price">฿65</div></div>
+      <div class="tile" onclick="addItem('สิงห์ (ขวด)', 75)"><div class="tile-title">สิงห์ (ขวด)</div><div class="tile-price">฿75</div></div>
+    </div>
+
+  </div>
+
+  <script>
+    var GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzzLQt_Mf8aekyFm3L0tLdFzc2OXJKzzye6IbJBTxkbty-tQ_ryMBkl4B9Cd1a2GEL0/exec";
+    var DATE_PIN = "3232";
+
+    var currentReceipt = [];
+    var activeTable = "Takeaway";
+    
+    var TABLE_COUNT = 8;
+    var tableOrders = {}; 
+
+    var storedTables = localStorage.getItem('tableOrders');
+    if (storedTables) {
+      try { tableOrders = JSON.parse(storedTables); } catch(e) { tableOrders = {}; }
+    }
+
+    var storedSales = localStorage.getItem('dailySales');
+    var dailySales = storedSales ? parseFloat(storedSales) : 0;
+    document.getElementById('daily-total').innerText = dailySales.toFixed(2);
+
+    function initTables() {
+      var grid = document.getElementById('table-grid');
+      grid.innerHTML = '';
+      createTableButton("Takeaway", grid);
+      for (var i = 1; i <= TABLE_COUNT; i++) {
+        createTableButton("Table " + i, grid);
+      }
+      renderTableGrid();
+    }
+
+    function createTableButton(tableName, parent) {
+      var btn = document.createElement('button');
+      btn.className = 'table-btn';
+      btn.id = 'tbl-btn-' + tableName.replace(/\s+/g, '');
+      btn.onclick = function() { selectTable(tableName); };
+      parent.appendChild(btn);
+    }
+
+    function renderTableGrid() {
+      updateTableBtnState("Takeaway");
+      for (var i = 1; i <= TABLE_COUNT; i++) {
+        updateTableBtnState("Table " + i);
+      }
+      document.getElementById('order-title').innerText = "Active Order: " + activeTable;
+    }
+
+    function updateTableBtnState(tableName) {
+      var btn = document.getElementById('tbl-btn-' + tableName.replace(/\s+/g, ''));
+      if (!btn) return;
+
+      var hasOrder = tableOrders[tableName] && tableOrders[tableName].length > 0;
+      var isSelected = (activeTable === tableName);
+
+      var sum = 0;
+      if (hasOrder) {
+        for (var k = 0; k < tableOrders[tableName].length; k++) {
+          sum += tableOrders[tableName][k].price;
+        }
+      }
+
+      btn.className = 'table-btn ' + (hasOrder ? 'occupied' : 'empty') + (isSelected ? ' selected' : '');
+      btn.innerHTML = tableName + '<span class="table-status-tag">' + (hasOrder ? '฿' + sum.toFixed(0) : 'Open') + '</span>';
+    }
+
+    function selectTable(tableName) {
+      tableOrders[activeTable] = currentReceipt;
+      saveTablesToStorage();
+
+      activeTable = tableName;
+      currentReceipt = tableOrders[activeTable] ? tableOrders[activeTable] : [];
+      
+      renderTableGrid();
+      renderReceipt();
+    }
+
+    function saveTableOrder() {
+      tableOrders[activeTable] = currentReceipt;
+      saveTablesToStorage();
+      renderTableGrid();
+      alert("Order held for " + activeTable);
+    }
+
+    function saveTablesToStorage() {
+      localStorage.setItem('tableOrders', JSON.stringify(tableOrders));
+    }
+
+    function addItem(name, price) {
+      currentReceipt.push({ name: name, price: price });
+      tableOrders[activeTable] = currentReceipt;
+      saveTablesToStorage();
+      renderTableGrid();
+      renderReceipt();
+    }
+
+    function removeItem(index) {
+      currentReceipt.splice(index, 1);
+      tableOrders[activeTable] = currentReceipt;
+      saveTablesToStorage();
+      renderTableGrid();
+      renderReceipt();
+    }
+
+    function renderReceipt() {
+      var list = document.getElementById('receipt-list');
+      list.innerHTML = '';
+      var total = 0;
+      for (var i = 0; i < currentReceipt.length; i++) {
+        var item = currentReceipt[i];
+        var li = document.createElement('li');
+        li.innerHTML = '<span>' + item.name + '</span><span>฿' + item.price.toFixed(2) + ' <button class="remove-btn no-print" onclick="removeItem(' + i + ')">✕</button></span>';
+        list.appendChild(li);
+        total += item.price;
+      }
+      document.getElementById('current-total').innerText = total.toFixed(2);
+    }
+
+    function clearReceipt() {
+      currentReceipt = [];
+      tableOrders[activeTable] = [];
+      saveTablesToStorage();
+      renderTableGrid();
+      renderReceipt();
+    }
+
+    function completeSale() {
+      if (currentReceipt.length === 0) {
+        alert("Cannot finalize an empty order!");
+        return;
+      }
+      
+      var total = 0;
+      var selectedDate = document.getElementById('sale-date').value;
+
+      var groupedMap = {};
+      for (var i = 0; i < currentReceipt.length; i++) {
+        var item = currentReceipt[i];
+        total += item.price;
+
+        if (groupedMap[item.name]) {
+          groupedMap[item.name].quantity += 1;
+          groupedMap[item.name].totalPrice += item.price;
+        } else {
+          groupedMap[item.name] = {
+            name: item.name,
+            unitPrice: item.price,
+            quantity: 1,
+            totalPrice: item.price
+          };
+        }
+      }
+
+      var itemsPayload = [];
+      for (var key in groupedMap) {
+        var g = groupedMap[key];
+        itemsPayload.push({
+          table: activeTable,
+          name: g.name,
+          unitPrice: g.unitPrice,
+          quantity: g.quantity,
+          totalPrice: g.totalPrice,
+          date: selectedDate
+        });
+      }
+
+      dailySales += total;
+      localStorage.setItem('dailySales', dailySales.toString());
+      document.getElementById('daily-total').innerText = dailySales.toFixed(2);
+
+      if (GOOGLE_SCRIPT_URL) {
+        fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            orderItems: itemsPayload, 
+            total: total,
+            customDate: selectedDate
+          })
+        });
+      }
+
+      window.print();
+      clearReceipt();
+    }
+
+    function resetDailyTotal() {
+      var confirmation = confirm("Are you sure you want to reset today's total on this device?");
+      if (confirmation) {
+        dailySales = 0;
+        localStorage.setItem('dailySales', '0');
+        document.getElementById('daily-total').innerText = '0.00';
+      }
+    }
+
+    function filterItems() {
+      var input = document.getElementById('item-search');
+      var filter = input.value.toLowerCase();
+      var tiles = document.getElementsByClassName('tile');
+
+      for (var i = 0; i < tiles.length; i++) {
+        var titleObj = tiles[i].getElementsByClassName('tile-title')[0];
+        if (titleObj) {
+          var txtValue = titleObj.textContent || titleObj.innerText;
+          if (txtValue.toLowerCase().indexOf(filter) > -1) {
+            tiles[i].style.display = "";
+          } else {
+            tiles[i].style.display = "none";
+          }
+        }
+      }
+    }
+
+    function initSaleDate() {
+      var today = new Date();
+      var yyyy = today.getFullYear();
+      var mm = String(today.getMonth() + 1).padStart(2, '0');
+      var dd = String(today.getDate()).padStart(2, '0');
+      var dateInput = document.getElementById('sale-date');
+      if (dateInput) {
+        dateInput.value = yyyy + '-' + mm + '-' + dd;
+      }
+    }
+
+    function unlockDateChange() {
+      var dateInput = document.getElementById('sale-date');
+      if (dateInput.hasAttribute('readonly')) {
+        var enteredPin = prompt("Enter PIN to change the sale date:");
+        if (enteredPin === DATE_PIN) {
+          dateInput.removeAttribute('readonly');
+          alert("Date unlocked! Select the target date for this sale.");
+        } else if (enteredPin !== null) {
+          alert("Incorrect PIN! Date remains locked.");
+        }
+      }
+    }
+
+    window.addEventListener('load', function() {
+      initSaleDate();
+      initTables();
+    });
+  </script>
+</body>
+</html>
